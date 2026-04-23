@@ -1,0 +1,219 @@
+===========================================================
+SHIPPING CALCULATOR - FUNCTION DOCUMENTATION
+Generated: April 22, 2026
+===========================================================
+
+
+-----------------------------------------------------------
+Function Name: calculateShipping
+File: src/calculator.js
+-----------------------------------------------------------
+
+Description:
+Calculates a full shipping cost breakdown based on package weight,
+delivery distance, and whether the item is fragile. Returns an object
+containing each individual fee component as well as the final total.
+
+Parameters:
+- weight_kg (number): Weight of the package in kilograms. Must be >= 0.
+- distance_km (number): Delivery distance in kilometres. Must be >= 0.
+- is_fragile (boolean): Indicates whether the item requires fragile handling.
+  Passed as a destructured object: { weight_kg, distance_km, is_fragile }.
+
+Returns:
+An object with the following properties:
+- base_fee (number): Fixed base fee applied to every shipment (5.00).
+- weight_fee (number): Fee calculated from weight (weight_kg * 0.50).
+- distance_fee (number): Fee calculated from distance ((distance_km / 100) * 1.00).
+- fragile_surcharge (number): Additional charge if is_fragile is true (3.00), otherwise 0.
+- total (number): Sum of all fees, rounded to 2 decimal places.
+
+Logic Breakdown:
+1. Assign the constant BASE_FEE (5.00) as the base fee.
+2. Multiply weight_kg by RATE_PER_KG (0.50) to compute the weight fee.
+3. Divide distance_km by 100, then multiply by RATE_PER_100KM (1.00) to compute the distance fee.
+4. If is_fragile is true, set fragile surcharge to FRAGILE_SURCHARGE (3.00); otherwise set it to 0.
+5. Sum all four fee components and round the result to 2 decimal places using parseFloat and toFixed.
+6. Return an object containing all individual fee fields and the total.
+
+Example Usage:
+  const result = calculateShipping({ weight_kg: 10, distance_km: 200, is_fragile: true });
+  // result => {
+  //   base_fee: 5,
+  //   weight_fee: 5,
+  //   distance_fee: 2,
+  //   fragile_surcharge: 3,
+  //   total: 15
+  // }
+
+  const result2 = calculateShipping({ weight_kg: 0, distance_km: 0, is_fragile: false });
+  // result2 => {
+  //   base_fee: 5,
+  //   weight_fee: 0,
+  //   distance_fee: 0,
+  //   fragile_surcharge: 0,
+  //   total: 5
+  // }
+
+Edge Cases:
+- weight_kg = 0 and distance_km = 0: Only the base fee (5.00) is charged.
+- is_fragile = false: No fragile surcharge is applied.
+- Very large weight or distance values will produce proportionally large fees with no upper cap.
+- Floating-point arithmetic is mitigated by rounding the total to 2 decimal places, but individual
+  fee fields (weight_fee, distance_fee) are not independently rounded.
+
+
+-----------------------------------------------------------
+Function Name: validate
+File: src/validator.js
+-----------------------------------------------------------
+
+Description:
+Validates the raw request body for a shipping calculation request.
+Checks that all three required fields are present, of the correct type,
+and within acceptable value ranges. Returns an array of error messages.
+
+Parameters:
+- body (object): The raw request body expected to contain:
+    - weight_kg (number): Package weight in kilograms.
+    - distance_km (number): Delivery distance in kilometres.
+    - is_fragile (boolean): Whether the item is fragile.
+
+Returns:
+An array of strings (string[]). Each string is a human-readable error message
+describing a specific validation failure. An empty array means the input is valid.
+
+Logic Breakdown:
+1. Destructure weight_kg, distance_km, and is_fragile from body. If body is null
+   or undefined, default to an empty object to avoid runtime errors.
+2. For weight_kg:
+   a. If undefined or null, push "weight_kg is required".
+   b. If not a number or NaN, push "weight_kg must be a number".
+   c. If less than 0, push "weight_kg must be >= 0".
+3. For distance_km:
+   a. If undefined or null, push "distance_km is required".
+   b. If not a number or NaN, push "distance_km must be a number".
+   c. If less than 0, push "distance_km must be >= 0".
+4. For is_fragile:
+   a. If undefined or null, push "is_fragile is required".
+   b. If not a boolean, push "is_fragile must be a boolean".
+5. Return the errors array.
+
+Example Usage:
+  const errors = validate({ weight_kg: 5, distance_km: 100, is_fragile: false });
+  // errors => []  (valid input)
+
+  const errors2 = validate({ weight_kg: -1, distance_km: 100, is_fragile: true });
+  // errors2 => ["weight_kg must be >= 0"]
+
+  const errors3 = validate(null);
+  // errors3 => [
+  //   "weight_kg is required",
+  //   "distance_km is required",
+  //   "is_fragile is required"
+  // ]
+
+  const errors4 = validate({ weight_kg: "heavy", distance_km: 50, is_fragile: 1 });
+  // errors4 => [
+  //   "weight_kg must be a number",
+  //   "is_fragile must be a boolean"
+  // ]
+
+Edge Cases:
+- Passing null or undefined as body defaults gracefully and returns all three "required" errors.
+- NaN is explicitly rejected even though typeof NaN === "number" in JavaScript.
+- weight_kg = 0 and distance_km = 0 are valid (zero is >= 0).
+- is_fragile must be strictly a boolean; numeric values like 0 or 1 are rejected.
+- Multiple validation errors can be returned at once, one per failing field.
+
+
+-----------------------------------------------------------
+Function Name: POST /api/shipping/calculate (Route Handler)
+File: src/server.js
+-----------------------------------------------------------
+
+Description:
+Express route handler for the shipping cost calculation API endpoint.
+Accepts a JSON request body, validates it, computes the shipping cost
+breakdown, and returns the result or an error response.
+
+Parameters:
+- req (Express Request): Incoming HTTP request. Expects req.body to contain:
+    - weight_kg (number): Package weight in kilograms.
+    - distance_km (number): Delivery distance in kilometres.
+    - is_fragile (boolean): Whether the item is fragile.
+- res (Express Response): Outgoing HTTP response object used to send the result.
+
+Returns:
+No direct return value. Sends one of the following HTTP responses:
+
+On validation failure (HTTP 400):
+  {
+    "error": "VALIDATION_ERROR",
+    "details": [ ...array of error message strings... ]
+  }
+
+On success (HTTP 200):
+  {
+    "breakdown": {
+      "base_fee": number,
+      "weight_fee": number,
+      "distance_fee": number,
+      "fragile_surcharge": number
+    },
+    "total": number,
+    "currency": "USD"
+  }
+
+Logic Breakdown:
+1. Call validate(req.body) to check the request payload for errors.
+2. If the errors array has one or more entries, respond with HTTP 400 and a
+   JSON body containing the error code "VALIDATION_ERROR" and the details array.
+3. If validation passes, call calculateShipping(req.body) to compute fees.
+4. Destructure base_fee, weight_fee, distance_fee, fragile_surcharge, and total
+   from the result.
+5. Respond with HTTP 200 and a JSON body containing a breakdown object, the
+   total, and a hardcoded currency value of "USD".
+
+Example Usage:
+  POST /api/shipping/calculate
+  Content-Type: application/json
+
+  Request body (valid):
+  { "weight_kg": 8, "distance_km": 150, "is_fragile": false }
+
+  Response (200 OK):
+  {
+    "breakdown": {
+      "base_fee": 5,
+      "weight_fee": 4,
+      "distance_fee": 1.5,
+      "fragile_surcharge": 0
+    },
+    "total": 10.5,
+    "currency": "USD"
+  }
+
+  Request body (invalid):
+  { "weight_kg": -5, "distance_km": 100 }
+
+  Response (400 Bad Request):
+  {
+    "error": "VALIDATION_ERROR",
+    "details": [
+      "weight_kg must be >= 0",
+      "is_fragile is required"
+    ]
+  }
+
+Edge Cases:
+- Missing or malformed JSON body will produce validation errors for all three required fields.
+- The currency field in the response is always "USD" and is not configurable per request.
+- The individual fee fields within breakdown are not independently rounded; only total is rounded.
+- The server listens on process.env.PORT if set, otherwise defaults to port 3000.
+- The module exports the Express app for use in tests without starting the server.
+
+
+===========================================================
+END OF DOCUMENTATION
+===========================================================
